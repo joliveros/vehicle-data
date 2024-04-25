@@ -80,20 +80,52 @@ class Cars(MarketPlaceActions):
             listing_data['make'] = make_model[space_ix[0]+1:space_ix[1]]
             listing_data['model'] = make_model[space_ix[1]+1:]
 
-            alog.info(listing_data)
-
             el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[1]')
 
             listing_data['price'] = el.find_element(By.XPATH, './div[2]').text
 
-            el = el.find_element(By.XPATH, './div[3]')
+            listed_str = el.find_element(By.XPATH, './div[3]').text
 
-            alog.info(el.get_attribute('outerHTML'))
+            # alog.info(el.get_attribute('outerHTML'))
 
-            listed = el.text
-            listed = re.findall("^Listed (.* ago).*", listed)[0]
+            listing_data['city'] = re.findall("^Listed .* ago in (.*)", listed_str)[0]
 
-            alog.info(dateparser.parse(listed))
+            listed = re.findall("^Listed (.* ago).*", listed_str)[0]
+
+            listing_data['created_at'] = dateparser.parse(listed)
+
+            # alog.info(el.find_element(By.XPATH, './div[4]').text)
+
+            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[5]')
+
+            listing_data['transmission'] = el.find_element(By.XPATH, './div/div[2]').text
+            listing_data['color'] = el.find_element(By.XPATH, './div/div[3]').text
+            listing_data['fuel_type'] = el.find_element(By.XPATH, './div/div[4]') \
+                .text.split(':')[-1].strip()
+            listing_data['engine_size'] = el.find_element(By.XPATH, './div/div[5]') \
+                .text.split(':')[-1].strip()
+
+            self.see_more()
+
+            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[6]/div[2]/div/div[1]/div/span')
+
+            listing_data['description'] = el.text
+
+            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[7]/div/div[2]/div[1]/div/div/div/div/div[2]/div/div/div/div/span/span/div/div/a')
+
+            profile_url = el.get_attribute('href')
+
+            listing_data['profile_url'] = re.findall("^(https:\/\/www\.facebook\.com\/marketplace\/profile\/\d+\/).*", profile_url)[0]
+
+            el = el.find_elements(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[1]/div/div[3]/div/div')
+
+            listing_data['images'] = []
+
+            for e in el:
+                listing_data['images'].append(
+                    e.find_element(By.CSS_SELECTOR, 'img').get_attribute('src'))
+
+            alog.info(alog.pformat(listing_data))
 
             time.sleep(4)
 
@@ -102,6 +134,12 @@ class Cars(MarketPlaceActions):
         time.sleep(5)
 
         self.driver.close()
+
+    def see_more(self):
+        el = self.driver.find_elements(By.XPATH,
+                              '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[6]/div[2]/div/div[1]/div/span/div/span')
+        if len(el) > 0:
+            el[0].click()
 
     def get_preliminary_listing(self):
         last_num_listings = 0
