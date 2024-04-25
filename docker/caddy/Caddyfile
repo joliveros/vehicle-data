@@ -1,0 +1,10 @@
+rubercubic.com
+
+root /app/
+gzip
+tls joliveros@rubercubic.com
+
+proxy / rubercubic.com:8081 {
+    transparent
+    except /static
+}

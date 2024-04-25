@@ -1,0 +1,5 @@
+{
+	"domain": "registry.rubercubic.com",
+	"certUrl": "https://acme-v02.api.letsencrypt.org/acme/cert/032f9d786e944fce9fc3691df12f3a63de89",
+	"certStableUrl": "https://acme-v02.api.letsencrypt.org/acme/cert/032f9d786e944fce9fc3691df12f3a63de89"
+}

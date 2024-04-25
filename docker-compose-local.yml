@@ -1,0 +1,35 @@
+version: '3.7'
+
+networks:
+  public:
+    name: public
+    external: true
+
+services:
+
+  postgres:
+    deploy:
+      replicas: 1
+    image: postgres:14
+    ports:
+      - "${DATABASE_PORT}:5432"
+    volumes:
+      - "$HOME/vehicle_data/data:/var/lib/postgresql/data"
+      - "${APP_DIR}/docker/postgresql.conf:/etc/postgresql/postgresql.conf"
+    environment:
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_DB=${DATABASE_NAME}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+    networks:
+      - public
+
+  redis:
+    image:
+      redis
+    volumes:
+      - "./redis.conf:/usr/local/etc/redis/redis.conf"
+    ports:
+      - 0.0.0.0:6379:6379
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - public

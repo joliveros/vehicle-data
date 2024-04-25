@@ -1,0 +1,7 @@
+rubercubic.com {
+  tls joliveros@rubercubic.com
+
+  proxy / rubercubic.com:8081 {
+    transparent
+  }
+}

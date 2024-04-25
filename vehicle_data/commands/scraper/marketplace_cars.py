@@ -1,26 +1,26 @@
 import urllib
-from datetime import datetime
-
-import dateparser
-from redis import Redis
-from selenium import webdriver
-from webdriver_manager.chrome import ChromeDriverManager
-
 from .actions import MarketPlaceActions
 from dataclasses import dataclass
+from datetime import datetime
 from functools import cached_property
+from redis import Redis
+from redis_collections import Dict, Set
+from selenium import webdriver
 from selenium.common import StaleElementReferenceException, NoSuchElementException
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from urllib.parse import urlencode
-from selenium.webdriver.chrome.service import Service
-from redis_collections import Dict, Set
+from vehicle_data import settings
+from webdriver_manager.chrome import ChromeDriverManager
+
 import alog
+import dateparser
 import moment
 import re
 import time
-from vehicle_data import settings
+from prisma import Prisma
 
 redis = Redis(host=settings.REDIS_HOST, port=6379, db=0)
 
@@ -35,10 +35,14 @@ class Cars(MarketPlaceActions):
     reset_page_counter: bool = True
 
     def __post_init__(self):
-        # self.driver_options.headless = self.headless
-        # self.driver_options.add_argument('--headless')
+
+        if self.headless:
+            self.driver_options.add_argument('--headless')
 
         self.listing_urls = Set(key='listing_urls', redis=redis)
+
+        self.db = Prisma()
+        self.db.connect()
 
         self.driver_options.add_argument('--no-sandbox')
         self.driver_options.add_argument("--disable-notifications")
@@ -51,89 +55,149 @@ class Cars(MarketPlaceActions):
 
         self.login()
 
-        # query = dict(query='2017 ford titulo limpio')
-        # query_str = urllib.parse.urlencode(query, doseq=False)
-        # self.driver.get(f'{settings.URL}/marketplace/zapopan/search?{query_str}')
-        # time.sleep(1)
-        # self.get_preliminary_listing()
+        makes = ['ford', 'volkswagen', 'chevrolet', 'dodge', 'toyota', 'honda', 'nissan']
+        years = ['2017', '2016', '2015']
 
-        alog.info(len(self.listing_urls))
-
-        while len(self.listing_urls) > 0:
-            listing_data = dict()
-            # url = self.listing_urls.pop()
-            url = 'https://www.facebook.com/marketplace/item/952588616572205/?ref=search&referral_code=null&referral_story_type=post&tracking=browse_serp%3A105483a0-dec8-48fd-96ba-40c0c351df10'
-
-            self.driver.get(url)
-
-            time.sleep(2)
-
-            el = self.driver.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div')
-
-            # alog.info(el.text)
-
-            make_model = el.find_element(By.CSS_SELECTOR, 'h1').text
-            listing_data['year'] = re.findall("\d{4,}", make_model)[0]
-
-            space_ix = find_idx(make_model, ' ')
-
-            listing_data['make'] = make_model[space_ix[0]+1:space_ix[1]]
-            listing_data['model'] = make_model[space_ix[1]+1:]
-
-            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[1]')
-
-            listing_data['price'] = el.find_element(By.XPATH, './div[2]').text
-
-            listed_str = el.find_element(By.XPATH, './div[3]').text
-
-            # alog.info(el.get_attribute('outerHTML'))
-
-            listing_data['city'] = re.findall("^Listed .* ago in (.*)", listed_str)[0]
-
-            listed = re.findall("^Listed (.* ago).*", listed_str)[0]
-
-            listing_data['created_at'] = dateparser.parse(listed)
-
-            # alog.info(el.find_element(By.XPATH, './div[4]').text)
-
-            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[5]')
-
-            listing_data['transmission'] = el.find_element(By.XPATH, './div/div[2]').text
-            listing_data['color'] = el.find_element(By.XPATH, './div/div[3]').text
-            listing_data['fuel_type'] = el.find_element(By.XPATH, './div/div[4]') \
-                .text.split(':')[-1].strip()
-            listing_data['engine_size'] = el.find_element(By.XPATH, './div/div[5]') \
-                .text.split(':')[-1].strip()
-
-            self.see_more()
-
-            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[6]/div[2]/div/div[1]/div/span')
-
-            listing_data['description'] = el.text
-
-            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[7]/div/div[2]/div[1]/div/div/div/div/div[2]/div/div/div/div/span/span/div/div/a')
-
-            profile_url = el.get_attribute('href')
-
-            listing_data['profile_url'] = re.findall("^(https:\/\/www\.facebook\.com\/marketplace\/profile\/\d+\/).*", profile_url)[0]
-
-            el = el.find_elements(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[1]/div/div[3]/div/div')
-
-            listing_data['images'] = []
-
-            for e in el:
-                listing_data['images'].append(
-                    e.find_element(By.CSS_SELECTOR, 'img').get_attribute('src'))
-
-            alog.info(alog.pformat(listing_data))
-
-            time.sleep(4)
-
-            break
+        for make in makes:
+            for year in years:
+                self.get_listings_for_query(f'{year} {make}')
 
         time.sleep(5)
 
         self.driver.close()
+
+    def get_listings_for_query(self, value):
+        query = dict(query=value)
+        query_str = urllib.parse.urlencode(query, doseq=False)
+        self.driver.get(f'{settings.URL}/marketplace/zapopan/search?{query_str}')
+        time.sleep(2)
+        self.get_preliminary_listing()
+        alog.info(len(self.listing_urls))
+
+        while len(self.listing_urls) > 0:
+            listing_data = dict()
+
+            url = self.listing_urls.pop()
+
+            # url=' https://www.facebook.com/marketplace/item/376831561861031/'
+
+            alog.info(url)
+
+            listing_data['url'] = url
+
+            id = re.findall("https:\/\/www\.facebook\.com\/marketplace\/item\/(\d+)\/", url)[0]
+
+            vehicle = self.db.vehicle.find_unique(where=dict(id=id))
+
+            if not vehicle:
+                self.get_listing_details(id, listing_data, url)
+
+    def get_listing_details(self, id, listing_data, url):
+        listing_data['id'] = id
+        self.driver.get(url)
+        time.sleep(2)
+        el = self.driver.find_element(By.XPATH,
+                                      '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div')
+        # alog.info(el.text)
+        make_model = el.find_element(By.CSS_SELECTOR, 'h1').text
+        listing_data['year'] = int(re.findall("\d{4,}", make_model)[0])
+        space_ix = find_idx(make_model, ' ')
+        if len(space_ix) > 1:
+            listing_data['make'] = make_model[space_ix[0] + 1:space_ix[1]]
+            listing_data['model'] = make_model[space_ix[1] + 1:]
+        el = el.find_element(By.XPATH,
+                             '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[1]')
+        try:
+            price = el.find_element(By.XPATH, './div[2]').text
+            alog.info(price)
+            price = int(''.join(re.findall("\d", price)))
+
+            if price < 999:
+                price = price * 1000
+
+            listing_data['price'] = price
+        except:
+            listing_data['price'] = 0
+        listed_str = el.find_element(By.XPATH, './div[3]').text
+        # alog.info(el.get_attribute('outerHTML'))
+        where_listed_re = re.findall("^Listed .* ago in (.*)", listed_str)
+        time.sleep(10)
+        if len(where_listed_re) > 0:
+            listing_data['city'] = where_listed_re[0]
+            listed = re.findall("^Listed (.* ago).*", listed_str)[0]
+            listing_data['created_at'] = dateparser.parse(listed)
+        else:
+            listing_data['city'] = ''
+
+        # alog.info(el.find_element(By.XPATH, './div[4]').text)
+        el = el.find_elements(By.XPATH,
+                              '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[5]')
+        if len(el) > 0:
+            el = el[0]
+
+            try:
+                listing_data['transmission'] = el.find_element(By.XPATH, './div/div[2]').text
+            except:
+                pass
+
+            try:
+                listing_data['color'] = el.find_element(By.XPATH, './div/div[3]').text
+            except:
+                pass
+
+            try:
+                listing_data['fuel_type'] = el.find_element(By.XPATH, './div/div[4]') \
+                    .text.split(':')[-1].strip()
+            except:
+                pass
+
+            try:
+                listing_data['engine_size'] = el.find_element(By.XPATH, './div/div[5]') \
+                    .text.split(':')[-1].strip()
+            except:
+                pass
+
+            self.see_more()
+
+            try:
+                el = el.find_element(By.XPATH,
+                                     '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[6]/div[2]/div/div[1]/div/span')
+
+                listing_data['description'] = el.text
+            except:
+                listing_data['description'] = 'none'
+
+            try:
+                el = el.find_element(By.XPATH,
+                                     '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[7]/div/div[2]/div[1]/div/div/div/div/div[2]/div/div/div/div/span/span/div/div/a')
+
+                profile_url = el.get_attribute('href')
+
+                alog.info(profile_url)
+
+                listing_data['profile_url'] = \
+                re.findall("^(https:\/\/www\.facebook\.com\/marketplace\/profile\/\d+\/).*", profile_url)[0]
+            except:
+                pass
+        el = self.driver.find_elements(By.XPATH,
+                                       '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[1]/div/div[3]/div/div')
+        images = []
+        for e in el:
+            images.append(dict(url=e.find_element(By.CSS_SELECTOR, 'img').get_attribute('src')))
+        data = dict(
+            create=dict(**listing_data),
+            update=dict(**listing_data)
+        )
+        self.db.vehicle.upsert(where=dict(id=id), data=data)
+        for image in images:
+            url = image['url']
+            self.db.facebookimage.upsert(
+                where=dict(url=url),
+                data=dict(
+                    create=dict(url=url, vehicles=dict(connect=dict(id=id))),
+                    update=dict(url=url, vehicles=dict(connect=dict(id=id))),
+                ))
+        time.sleep(2)
 
     def see_more(self):
         el = self.driver.find_elements(By.XPATH,
