@@ -1,5 +1,8 @@
 import urllib
 from datetime import datetime
+
+import dateparser
+from redis import Redis
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 
@@ -12,15 +15,17 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from urllib.parse import urlencode
 from selenium.webdriver.chrome.service import Service
-
+from redis_collections import Dict, Set
 import alog
 import moment
 import re
 import time
-
-from redis_collections import Dict
-
 from vehicle_data import settings
+
+redis = Redis(host=settings.REDIS_HOST, port=6379, db=0)
+
+def find_idx(s, ch):
+    return [i for i, ltr in enumerate(s) if ltr == ch]
 
 
 @dataclass
@@ -32,6 +37,9 @@ class Cars(MarketPlaceActions):
     def __post_init__(self):
         # self.driver_options.headless = self.headless
         # self.driver_options.add_argument('--headless')
+
+        self.listing_urls = Set(key='listing_urls', redis=redis)
+
         self.driver_options.add_argument('--no-sandbox')
         self.driver_options.add_argument("--disable-notifications")
         self.driver_options.add_argument('--disable-dev-shm-usage')
@@ -43,18 +51,83 @@ class Cars(MarketPlaceActions):
 
         self.login()
 
-        # https://www.facebook.com/marketplace/zapopan/search?query=2017
+        # query = dict(query='2017 ford titulo limpio')
+        # query_str = urllib.parse.urlencode(query, doseq=False)
+        # self.driver.get(f'{settings.URL}/marketplace/zapopan/search?{query_str}')
+        # time.sleep(1)
+        # self.get_preliminary_listing()
 
-        query = dict(query='2017 titulo limpio')
+        alog.info(len(self.listing_urls))
 
-        query_str = urllib.parse.urlencode(query, doseq=False)
+        while len(self.listing_urls) > 0:
+            listing_data = dict()
+            # url = self.listing_urls.pop()
+            url = 'https://www.facebook.com/marketplace/item/952588616572205/?ref=search&referral_code=null&referral_story_type=post&tracking=browse_serp%3A105483a0-dec8-48fd-96ba-40c0c351df10'
 
-        self.driver.get(f'{settings.URL}/marketplace/zapopan/search?{query_str}')
+            self.driver.get(url)
 
-        time.sleep(60 * 2)
+            time.sleep(2)
+
+            el = self.driver.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div')
+
+            # alog.info(el.text)
+
+            make_model = el.find_element(By.CSS_SELECTOR, 'h1').text
+            listing_data['year'] = re.findall("\d{4,}", make_model)[0]
+
+            space_ix = find_idx(make_model, ' ')
+
+            listing_data['make'] = make_model[space_ix[0]+1:space_ix[1]]
+            listing_data['model'] = make_model[space_ix[1]+1:]
+
+            alog.info(listing_data)
+
+            el = el.find_element(By.XPATH, '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[1]')
+
+            listing_data['price'] = el.find_element(By.XPATH, './div[2]').text
+
+            el = el.find_element(By.XPATH, './div[3]')
+
+            alog.info(el.get_attribute('outerHTML'))
+
+            listed = el.text
+            listed = re.findall("^Listed (.* ago).*", listed)[0]
+
+            alog.info(dateparser.parse(listed))
+
+            time.sleep(4)
+
+            break
+
+        time.sleep(5)
 
         self.driver.close()
 
+    def get_preliminary_listing(self):
+        last_num_listings = 0
+
+        while True:
+            el = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                'div[aria-label="Collection of Marketplace items"] > div > div > div > div:nth-child(1) > div > div > div > div > span')
+
+            if last_num_listings == len(el):
+                break
+
+            last_num_listings = len(el)
+
+            for e in el:
+                anchors = e.find_elements(By.CSS_SELECTOR, 'a')
+                if len(anchors) > 0:
+                    url = anchors[0].get_attribute('href')
+
+                    sanitized_url = re.findall(r"https:\/\/www\.facebook\.com\/marketplace\/item\/\d+\/", url)[0]
+
+                    self.listing_urls.add(sanitized_url)
+
+            self.driver.execute_script("arguments[0].scrollIntoView();", el[-1])
+
+            time.sleep(2)
 
     def search(self, value, timeout=10):
         driver = self.driver

@@ -12,14 +12,6 @@ VERIFY_LOGIN_ID = "global-nav__me-photo"
 
 @dataclass
 class MarketPlaceActions(Scraper):
-    # def __prompt_email_password():
-    #   u = input("Email: ")
-    #   p = getpass.getpass(prompt="Password: ")
-    #   return (u, p)
-    #
-    # def page_has_loaded(driver):
-    #     page_state = driver.execute_script('return document.readyState;')
-    #     return page_state == 'complete'
 
     def _login(self, email, password, timeout=10):
         driver = self.driver

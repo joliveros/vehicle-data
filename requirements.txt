@@ -4,14 +4,17 @@
 # or run `make init` to create this file automatically based on the template.
 # You can also run `make switch-to-poetry` to use the poetry package manager.
 
-alog
+# python-dotenv==0.11.0
+alog~=1.2.0
+click~=8.1.7
+dateparser~=1.2.0
 get-docker-secret
-moment
+moment~=0.12.1
 notebook==6.5.6
 pipdeptree
 prisma
-# python-dotenv==0.11.0
-redis
 redis-collections
-selenium
+redis~=5.0.4
+selenium~=4.19.0
+setuptools~=65.5.0
 webdriver-manager
