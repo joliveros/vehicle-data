@@ -24,6 +24,7 @@ from prisma import Prisma
 
 redis = Redis(host=settings.REDIS_HOST, port=6379, db=0)
 
+
 def find_idx(s, ch):
     return [i for i, ltr in enumerate(s) if ltr == ch]
 
@@ -55,21 +56,24 @@ class Cars(MarketPlaceActions):
 
         self.login()
 
+        cities = ['tijuana', 'mexicali', 'zapopan']
         makes = ['ford', 'volkswagen', 'chevrolet', 'dodge', 'toyota', 'honda', 'nissan']
         years = ['2017', '2016', '2015']
 
-        for make in makes:
-            for year in years:
-                self.get_listings_for_query(f'{year} {make}')
+        while True:
+            for city in cities:
+                for make in makes:
+                    for year in years:
+                        self.get_listings_for_query(f'{year} {make}', city)
 
         time.sleep(5)
 
         self.driver.close()
 
-    def get_listings_for_query(self, value):
+    def get_listings_for_query(self, value, city):
         query = dict(query=value)
         query_str = urllib.parse.urlencode(query, doseq=False)
-        self.driver.get(f'{settings.URL}/marketplace/zapopan/search?{query_str}')
+        self.driver.get(f'{settings.URL}/marketplace/{city}/search?{query_str}')
         time.sleep(2)
         self.get_preliminary_listing()
         alog.info(len(self.listing_urls))
@@ -121,7 +125,7 @@ class Cars(MarketPlaceActions):
         listed_str = el.find_element(By.XPATH, './div[3]').text
         # alog.info(el.get_attribute('outerHTML'))
         where_listed_re = re.findall("^Listed .* ago in (.*)", listed_str)
-        time.sleep(10)
+
         if len(where_listed_re) > 0:
             listing_data['city'] = where_listed_re[0]
             listed = re.findall("^Listed (.* ago).*", listed_str)[0]
@@ -163,7 +167,7 @@ class Cars(MarketPlaceActions):
                 el = el.find_element(By.XPATH,
                                      '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[6]/div[2]/div/div[1]/div/span')
 
-                listing_data['description'] = el.text
+                listing_data['description'] = el.text[:999]
             except:
                 listing_data['description'] = 'none'
 
@@ -176,7 +180,7 @@ class Cars(MarketPlaceActions):
                 alog.info(profile_url)
 
                 listing_data['profile_url'] = \
-                re.findall("^(https:\/\/www\.facebook\.com\/marketplace\/profile\/\d+\/).*", profile_url)[0]
+                    re.findall("^(https:\/\/www\.facebook\.com\/marketplace\/profile\/\d+\/).*", profile_url)[0]
             except:
                 pass
         el = self.driver.find_elements(By.XPATH,
@@ -197,11 +201,12 @@ class Cars(MarketPlaceActions):
                     create=dict(url=url, vehicles=dict(connect=dict(id=id))),
                     update=dict(url=url, vehicles=dict(connect=dict(id=id))),
                 ))
-        time.sleep(2)
+
+        # time.sleep(2)
 
     def see_more(self):
         el = self.driver.find_elements(By.XPATH,
-                              '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[6]/div[2]/div/div[1]/div/span/div/span')
+                                       '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div/div[1]/div[1]/div[6]/div[2]/div/div[1]/div/span/div/span')
         if len(el) > 0:
             el[0].click()
 
@@ -210,7 +215,7 @@ class Cars(MarketPlaceActions):
 
         while True:
             el = self.driver.find_elements(
-                    By.CSS_SELECTOR,
+                By.CSS_SELECTOR,
                 'div[aria-label="Collection of Marketplace items"] > div > div > div > div:nth-child(1) > div > div > div > div > span')
 
             if last_num_listings == len(el):
@@ -242,76 +247,78 @@ class Cars(MarketPlaceActions):
         el.submit()
 
     def get_listing(self, listing_url):
-            job = self.driver.find_element(By.CLASS_NAME, 'jobs-details__main-content')
+        job = self.driver.find_element(By.CLASS_NAME, 'jobs-details__main-content')
 
-            top_card = job.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__content--two-pane')
+        top_card = job.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__content--two-pane')
 
-            title = top_card.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__job-title').text
+        title = top_card.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__job-title').text
 
-            company_name = top_card.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__primary-description-without-tagline > a').text
+        company_name = top_card.find_element(By.CLASS_NAME,
+                                             'job-details-jobs-unified-top-card__primary-description-without-tagline > a').text
 
-            description = top_card.find_elements(By.CLASS_NAME, 'job-details-jobs-unified-top-card__primary-description-without-tagline > span')
+        description = top_card.find_elements(By.CLASS_NAME,
+                                             'job-details-jobs-unified-top-card__primary-description-without-tagline > span')
 
-            alog.info([span.text for span in description])
-            created = [span.text for span in description][2]
+        alog.info([span.text for span in description])
+        created = [span.text for span in description][2]
 
-            if 'Reposted' in created:
-                created = created.replace('Reposted', '')
+        if 'Reposted' in created:
+            created = created.replace('Reposted', '')
 
-            alog.info(created)
+        alog.info(created)
 
-            if len(created) > 0:
-                created = moment.date(created).date.astimezone()
-            else:
-                created = datetime.now()
+        if len(created) > 0:
+            created = moment.date(created).date.astimezone()
+        else:
+            created = datetime.now()
 
-            applicant_count = self.applicant_count(top_card)
-            job_insight = top_card.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__job-insight')
+        applicant_count = self.applicant_count(top_card)
+        job_insight = top_card.find_element(By.CLASS_NAME, 'job-details-jobs-unified-top-card__job-insight')
 
-            salary = self.salary(job_insight)
+        salary = self.salary(job_insight)
 
-            labor_category, level = self.category_and_level(job_insight)
+        labor_category, level = self.category_and_level(job_insight)
 
-            size_and_sector = top_card \
-                .find_elements(By.CLASS_NAME, 'job-details-jobs-unified-top-card__job-insight')[1].text
+        size_and_sector = top_card \
+            .find_elements(By.CLASS_NAME, 'job-details-jobs-unified-top-card__job-insight')[1].text
 
-            # time.sleep(60 * 2)
+        # time.sleep(60 * 2)
 
-            size_and_sector = [val.strip() for val in size_and_sector.split('·')]
+        size_and_sector = [val.strip() for val in size_and_sector.split('·')]
 
-            size = self.company_size(size_and_sector)
+        size = self.company_size(size_and_sector)
 
-            sector = self.sector(size_and_sector)
+        sector = self.sector(size_and_sector)
 
-            cards = job.find_elements(By.CLASS_NAME, 'artdeco-card')
+        cards = job.find_elements(By.CLASS_NAME, 'artdeco-card')
 
-            hiring_person_url = self.hiring_person_url(cards)
+        hiring_person_url = self.hiring_person_url(cards)
 
-            description = job.find_element(By.CLASS_NAME, 'jobs-description').get_attribute('innerHTML')
+        description = job.find_element(By.CLASS_NAME, 'jobs-description').get_attribute('innerHTML')
 
-            company_url = self.company_url(job)
+        company_url = self.company_url(job)
 
-            listing_defaults = dict(applicant_count=applicant_count,
-                                    company_name=company_name,
-                                    created=created,
-                                    description=description,
-                                    company_url=company_url,
-                                    hiring_person_url=hiring_person_url,
-                                    labor_category=LinkedInLaborCategory.objects.get_or_create(name=labor_category)[0],
-                                    level=LinkedInOrgLevel.objects.get_or_create(name=level)[0], listing_url=listing_url,
-                                    salary_max=salary[1] if salary is not None else None,
-                                    size_max=size[1] if size is not None else None,
-                                    salary_min=salary[0] if salary is not None else None,
-                                    size_min=size[0] if size is not None else None,
-                                    sector=LinkedInOrgSector.objects.get_or_create(name=sector)[0], title=title)
+        listing_defaults = dict(applicant_count=applicant_count,
+                                company_name=company_name,
+                                created=created,
+                                description=description,
+                                company_url=company_url,
+                                hiring_person_url=hiring_person_url,
+                                labor_category=LinkedInLaborCategory.objects.get_or_create(name=labor_category)[0],
+                                level=LinkedInOrgLevel.objects.get_or_create(name=level)[0], listing_url=listing_url,
+                                salary_max=salary[1] if salary is not None else None,
+                                size_max=size[1] if size is not None else None,
+                                salary_min=salary[0] if salary is not None else None,
+                                size_min=size[0] if size is not None else None,
+                                sector=LinkedInOrgSector.objects.get_or_create(name=sector)[0], title=title)
 
-            if not self.dry_run:
-                listing, _ = LinkedInJob.objects\
-                    .get_or_create(listing_url=listing_url, defaults=listing_defaults)
+        if not self.dry_run:
+            listing, _ = LinkedInJob.objects \
+                .get_or_create(listing_url=listing_url, defaults=listing_defaults)
 
-                alog.info(alog.pformat(model_to_dict(listing)))
-            else:
-                alog.info(alog.pformat(listing_defaults))
+            alog.info(alog.pformat(model_to_dict(listing)))
+        else:
+            alog.info(alog.pformat(listing_defaults))
 
     def listing_url(self, job_item):
         listing_url = job_item.find_element(By.CLASS_NAME, 'job-card-container__link') \
