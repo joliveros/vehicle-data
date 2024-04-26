@@ -80,10 +80,8 @@ class Cars(MarketPlaceActions):
 
         while len(self.listing_urls) > 0:
             listing_data = dict()
-
+            
             url = self.listing_urls.pop()
-
-            # url=' https://www.facebook.com/marketplace/item/376831561861031/'
 
             alog.info(url)
 
@@ -95,16 +93,30 @@ class Cars(MarketPlaceActions):
 
             if not vehicle:
                 self.get_listing_details(id, listing_data, url)
+                time.sleep(5)
 
     def get_listing_details(self, id, listing_data, url):
         listing_data['id'] = id
         self.driver.get(url)
         time.sleep(2)
-        el = self.driver.find_element(By.XPATH,
+
+        el = self.driver.find_elements(By.XPATH,
                                       '/html/body/div[1]/div/div[1]/div/div[3]/div/div/div[1]/div[1]/div[2]/div/div/div/div/div/div[1]/div[2]/div/div[2]/div')
+
+        if len(el) == 0:
+            return
+        else:
+            el = el[0]
+
         # alog.info(el.text)
         make_model = el.find_element(By.CSS_SELECTOR, 'h1').text
-        listing_data['year'] = int(re.findall("\d{4,}", make_model)[0])
+
+        year_re = re.findall("\d{4,}", make_model)
+        if len(year_re) > 0:
+            listing_data['year'] = int(year_re[0])
+        else:
+            listing_data['year'] = 0
+
         space_ix = find_idx(make_model, ' ')
         if len(space_ix) > 1:
             listing_data['make'] = make_model[space_ix[0] + 1:space_ix[1]]
@@ -118,6 +130,8 @@ class Cars(MarketPlaceActions):
 
             if price < 999:
                 price = price * 1000
+            if price >= 9999999:
+                price = 0
 
             listing_data['price'] = price
         except:

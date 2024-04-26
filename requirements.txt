@@ -18,3 +18,4 @@ redis~=5.0.4
 selenium~=4.19.0
 setuptools~=65.5.0
 webdriver-manager
+pandas
